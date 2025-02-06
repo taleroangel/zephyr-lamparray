@@ -1,0 +1,42 @@
+# Build directories
+BUILD_DIR ?= build
+
+# Zephyr parameters
+ZEPHYR_BASE ?= $(shell west topdir)
+
+# Configuration tool for KConfig
+CONFIG_TOOL = guiconfig
+
+# Additional compilation parameters
+ARGS := 
+
+all: build
+
+# -- Building
+# Build project
+build::
+	@west build -p auto -b ${BOARD} --build-dir=${BUILD_DIR} -- ${ARGS}
+
+# Build from scratch
+pristine::
+	west build -p always -b ${BOARD} . --build-dir=${BUILD_DIR} -- ${ARGS}
+
+# -- Developer utilities
+# Flash .elf into the board
+flash:: build
+	@west flash --build-dir=${BUILD_DIR}
+
+# -- Script utilities
+
+# Show menuconfig/guiconfig
+config::
+	@west build -b ${BOARD} --build-dir=${BUILD_DIR} -t ${CONFIG_TOOL} -- ${ARGS}
+
+global:
+	@west build --build-dir=${BUILD_DIR} -t ${CONFIG_TOOL} -- ${ARGS}
+
+# Clean project files
+clean:
+	@rm -rf ${BUILD_DIR}
+
+.PHONY: build flash pristine config clean

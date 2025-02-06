@@ -1,0 +1,18 @@
+# This is the makefile for the 'rpi_pico' board
+include Makefile.base
+
+# Get debug properties
+OPENOCD_PATH := $(shell which openocd)
+DEBUGGER := cmsis-dap
+
+# Arguments
+ARGS := ${ARGS}\
+	-DOPENOCD=${OPENOCD_ROOT}\
+	-DRPI_PICO_DEBUG_ADAPTER=${DEBUGGER}
+
+# Board name
+BOARD := rpi_pico
+
+.PHONY: restart
+restart:
+	$(OPENOCD_PATH) -f interface/${DEBUGGER}.cfg -f target/rp2040.cfg -c "init; reset; exit"

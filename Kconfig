@@ -1,0 +1,4 @@
+menu "LampArray Configurations"
+
+endmenu
+source "Kconfig.zephyr"
