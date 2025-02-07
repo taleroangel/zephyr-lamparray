@@ -1,4 +1,5 @@
 #include "hid/hid.h"
+#include "hid/report.h"
 #include "error/error.h"
 
 #include <stdlib.h>
@@ -117,6 +118,11 @@ static int hid_interface_init(const struct device *hid_device)
     // Get lock on USB device
     k_mutex_lock(&mtx_usb_device, K_FOREVER);
 
+    // Log the hexdump of the 'hid_report_desc'
+    LOG_HEXDUMP_INF(
+        hid_report_desc, sizeof(hid_report_desc),
+        "USB HID Report Descriptor");
+
     // Register the HID device
     usb_hid_register_device(
         hid_device,
@@ -126,9 +132,7 @@ static int hid_interface_init(const struct device *hid_device)
         &hid_callback_ops);
 
     // Log the hexdump of the 'hid_report_desc'
-    LOG_HEXDUMP_INF(
-        hid_report_desc, sizeof(hid_report_desc),
-        "(Registered) HID Report Descriptor");
+    LOG_INF("(Registered) HID Report Descriptor");
 
     // Initialize the HID Class
     if ((err = usb_hid_init(hid_device)) < 0)

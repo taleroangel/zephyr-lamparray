@@ -20,16 +20,10 @@
 / {
     gpio-keys {
         compatible = "gpio-keys";
-
-        /* This is the PANIC signal pin */
-        panic0: panic_0 {
-            gpios = <&gpio0 10 GPIO_ACTIVE_HIGH>;
-        };
     };
 
     aliases {
         strip0 = &strip0;
-        panic0 = &panic0;
     };
 };
 
