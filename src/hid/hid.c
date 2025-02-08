@@ -9,10 +9,14 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
+
 #include <zephyr/logging/log.h>
+
+#include <zephyr/sys/byteorder.h>
 
 #include <zephyr/usb/usb_device.h>
 #include <zephyr/usb/class/usb_hid.h>
+
 #include <zephyr/drivers/usb/usb_dc.h>
 #include <zephyr/drivers/usb/udc_buf.h>
 
@@ -20,31 +24,31 @@ LOG_MODULE_REGISTER(hid);
 
 /**
  * @brief Check if the usb device is ready to send requests
- *
  */
 static volatile bool usb_is_ready = false;
 
 /**
  * @brief Semaphore to indicate the USB interface is ready
- *
+ * @note Take this semaphore when {usb_is_ready} is false, this will block until
+ * the interface is once again ready.
  */
 static K_SEM_DEFINE(sem_usb_ready, 0, 1);
 
 /**
  * @brief Semaphore to indicate the USB HID input transfer was successfull and a new transfer is possible
- *
+ * @note Take this semaphore after doing some operation to wait for the previous transfer to complete
  */
 static K_SEM_DEFINE(sem_transfer_complete, 0, 1);
 
 /**
  * @brief Mutex for exclusive access to the hid_device
- *
+ * @note Use this before any operation on the USB device
  */
 static K_MUTEX_DEFINE(mtx_usb_device);
 
 /**
  * @brief Report descriptor for the HID interface
- *
+ * @note Keep this variable in static memory, if not program will fail
  */
 static uint8_t hid_report_desc[] = HID_LAMPARRAY_REPORT_DESCRIPTOR();
 
@@ -52,9 +56,11 @@ static uint8_t hid_report_desc[] = HID_LAMPARRAY_REPORT_DESCRIPTOR();
  * @brief Callback when USB status changes, this functions gives {sem_usb_ready} on USB connection successfull
  *
  * @param cb_status Current USB status
+ * @param params Parameter for bit-mask
  */
-static inline void usb_status_isr(enum usb_dc_status_code cb_status,
-                                  const uint8_t *params)
+static inline void usb_status_isr(
+    enum usb_dc_status_code cb_status,
+    const uint8_t *params)
 {
     switch (cb_status)
     {
@@ -65,7 +71,7 @@ static inline void usb_status_isr(enum usb_dc_status_code cb_status,
 
     // USB interface is ready, signal threads
     case USB_DC_CONFIGURED:
-        // Signal the UB interface is ready
+        // Signal the USB interface is ready
         usb_is_ready = true;
         k_sem_give(&sem_usb_ready);
         break;
@@ -81,7 +87,6 @@ static inline void usb_status_isr(enum usb_dc_status_code cb_status,
 
 /**
  * @brief Callback when current USB HID Input has been completed
- *
  */
 static inline void hid_input_ready_isr(const struct device *_)
 {
@@ -90,12 +95,39 @@ static inline void hid_input_ready_isr(const struct device *_)
     k_sem_give(&sem_transfer_complete);
 }
 
+static int hid_get_report(
+    const struct device *dev,
+    struct usb_setup_packet *setup,
+    int32_t *len,
+    uint8_t **data)
+{
+    uint8_t request[2];
+    // USB always uses LittleEndian
+    sys_put_le16(setup->wValue, request);
+
+    // Print the request
+    LOG_INF("%02X, %02X", request[0], request[1]);
+
+    return 0;
+}
+
+static int hid_set_report(
+    const struct device *dev,
+    struct usb_setup_packet *setup,
+    int32_t *len,
+    uint8_t **data)
+{
+}
+
 /**
  * @brief Callbacks for USB HID Class status change.
  */
 static const struct hid_ops hid_callback_ops = {
     /* This one is important, is it called when USB host is ready to accept input */
     .int_in_ready = hid_input_ready_isr,
+    /* HID report data */
+    .get_report = hid_get_report,
+    .set_report = hid_set_report,
 };
 
 /**
@@ -176,6 +208,7 @@ void hid_lamparray_main(void *_p1, void *_p2, void *_p3)
         application_panic(ERROR_REASON_HARDWARE, err);
     }
 
+    // Busy wait...
     while (true)
     {
         k_busy_wait(1000);

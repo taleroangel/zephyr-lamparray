@@ -24,19 +24,16 @@
 
 /**
  * @brief hid_activity_main() thread stack size
- *
  */
 #define HID_LAMPARRAY_THREAD_STACK_SIZE 1024
 
 /**
  * @brief hid_activity_main() priority
- *
  */
 #define HID_LAMPARRAY_THREAD_PRIORITY 1
 
 /**
  * @brief Timeout for HID failure
- *
  */
 #define HID_LAMPARRAY_TIMEOUT K_SECONDS(30)
 
