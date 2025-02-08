@@ -11,16 +11,24 @@
 #ifndef __HID_H__
 #define __HID_H__
 
-#include <stdint.h>
-
 #include <zephyr/kernel.h>
-#include <zephyr/device.h>
-#include <zephyr/logging/log.h>
 
-#include <zephyr/usb/usb_device.h>
-#include <zephyr/usb/class/usb_hid.h>
-#include <zephyr/drivers/usb/usb_dc.h>
-#include <zephyr/drivers/usb/udc_buf.h>
+enum HidReportRequestKind
+{
+    HID_REPORT_REQUEST_KIND_GET_REPORT = 0x01,
+    HID_REPORT_REQUEST_KIND_GET_IDLE = 0x02,
+    HID_REPORT_REQUEST_KIND_GET_PROTOCOL = 0x03,
+    HID_REPORT_REQUEST_KIND_SET_REPORT = 0x09,
+    HID_REPORT_REQUEST_KIND_SET_IDLE = 0x0A,
+    HID_REPORT_REQUEST_KIND_SET_PROTOCOL = 0x0B,
+};
+
+enum HidReportType
+{
+    HID_REPORT_TYPE_INPUT = 1,
+    HID_REPORT_TYPE_OUTPUT = 2,
+    HID_REPORT_TYPE_FEATURE = 3,
+};
 
 /**
  * @brief hid_activity_main() thread stack size

@@ -1,9 +1,9 @@
+#include "descriptor.h"
+#include "reports.h"
 #include "hid/hid.h"
-#include "hid/report.h"
 #include "error/error.h"
 
 #include <stdlib.h>
-#include <stdint.h>
 #include <errno.h>
 #include <string.h>
 
@@ -95,20 +95,81 @@ static inline void hid_input_ready_isr(const struct device *_)
     k_sem_give(&sem_transfer_complete);
 }
 
+/** TODO: Remove this, auxiliary debugging function */
+static ALWAYS_INLINE void __print_usb_setup_packet(const char *name, struct usb_setup_packet *setup)
+{
+    LOG_INF("%s: UsbSetupPacket\n\tbmRequestType = (Recipient: %01X, Type: %01x, Direction: %01x)\n\tbRequest = %02X\n\twValue = %04X\n\twIndex = %04x\n\twLength = %04x",
+            name,
+            setup->RequestType.recipient,
+            setup->RequestType.type,
+            setup->RequestType.direction,
+            setup->bRequest,
+            setup->wValue,
+            setup->wIndex,
+            setup->wLength);
+}
+
 static int hid_get_report(
     const struct device *dev,
     struct usb_setup_packet *setup,
     int32_t *len,
     uint8_t **data)
 {
-    uint8_t request[2];
-    // USB always uses LittleEndian
-    sys_put_le16(setup->wValue, request);
+    __print_usb_setup_packet("GetReport", setup);
 
-    // Print the request
-    LOG_INF("%02X, %02X", request[0], request[1]);
+    // Check operation type
+    if (setup->bRequest != HID_REPORT_REQUEST_KIND_GET_REPORT)
+    {
+        LOG_WRN("GetReport: [bRequest] (%d) ignored", setup->bRequest);
+        return 0;
+    }
 
-    return 0;
+    // Get the request data
+    uint8_t request_buffer[2];
+    sys_put_le16(setup->wValue, request_buffer);
+
+    // Get values from request data
+    uint8_t report_id = request_buffer[0];
+    uint8_t report_type = request_buffer[1];
+
+    // Check if requesting feature
+    if (report_type != HID_REPORT_TYPE_FEATURE)
+    {
+        LOG_ERR("GetReport: HidReportType [wValueH] not supported (%d)", report_type);
+        return -ENOTSUP;
+    }
+
+    // Check which report is being solicited
+    switch (report_id)
+    {
+    case LAMPARRAY_ATTRIBUTES_REPORT:
+        /* Return LampArrayAttributes */
+        const struct LampArrayAttributesReport attributes_report = {
+            .ReportId = LAMPARRAY_ATTRIBUTES_REPORT,
+            .LampCount = LAMPARRAY_NUMBER_LED,
+            .BoundingBoxWidthInMicrometers = 250000,
+            .BoundingBoxHeightInMicrometers = 250000,
+            .BoundingBoxDepthInMicrometers = 250000,
+            .LampArrayKind = LAMPARRAY_KIND_CHASSIS,
+            .MinUpdateIntervalInMicroseconds = CONFIG_MIN_UPDATE_TIME,
+        };
+
+        // Structure doesn't fit HOST frame length
+        if (sizeof(attributes_report) > setup->wLength)
+        {
+            LOG_ERR("GetReport: (%d) wont fit in (%d) frame",
+                    sizeof(attributes_report), setup->wLength);
+            return -EOVERFLOW;
+        }
+
+        // Copy data
+        memcpy(*data, &attributes_report, sizeof(attributes_report));
+        return 0;
+
+    default:
+        LOG_ERR("GetReport: bad index (%d)", request_buffer[0]);
+        return -ENOTSUP;
+    }
 }
 
 static int hid_set_report(
@@ -117,6 +178,11 @@ static int hid_set_report(
     int32_t *len,
     uint8_t **data)
 {
+    __print_usb_setup_packet("SetReport", setup);
+    LOG_HEXDUMP_INF(*data, *len, "SetReport,Data");
+    memset(*data, 0x55, 8);
+
+    return 0;
 }
 
 /**

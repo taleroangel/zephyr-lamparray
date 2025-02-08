@@ -1,5 +1,5 @@
-#ifndef HID_REPORT_H__
-#define HID_REPORT_H__
+#ifndef __HID_DESCRIPTOR_H__
+#define __HID_DESCRIPTOR_H__
 
 #include <zephyr/usb/class/usb_hid.h>
 #include <zephyr/sys/util_macro.h>
@@ -17,13 +17,13 @@
 // LampCount
 #define __LAMPARRAY_LAMPCOUNT_USAGE 0x03
 // BoundingBoxWidthInMicrometers
-#define __LAMPARRAY_BOUNDING_BIX_WIDTH_USAGE 0x04
+#define __LAMPARRAY_BOUNDING_BOX_WIDTH_USAGE 0x04
 // BoundingBoxHeightInMicrometers
-#define __LAMPARRAY_BOUNDING_BIX_HEIGHT_USAGE 0x05
+#define __LAMPARRAY_BOUNDING_BOX_HEIGHT_USAGE 0x05
 // BoundingBoxDepthInMicrometers
-#define __LAMPARRAY_BOUNDING_BIX_DEPTH_USAGE 0x06
+#define __LAMPARRAY_BOUNDING_BOX_DEPTH_USAGE 0x06
 // LampArrayKindChassis
-#define __LAMPARRAY_KIND_CHASSIS_USAGE 0x07
+#define __LAMPARRAY_KIND_USAGE 0x07
 // MinUpdateIntervalInMicroseconds
 #define __LAMPARRAY_MINUPDTINTUS_USAGE 0x08
 // LampAttributesRequestReport
@@ -78,14 +78,10 @@
 #define __LAMPARRAY_AUTONOMOUS_MODE_USAGE 0x71
 
 /**
- * @brief LampArrayKind parameter
- */
-#define LAMPARRAY_KIND __LAMPARRAY_KIND_CHASSIS_USAGE
-
-/**
  * @brief Number of LEDs in LampArray
+ * @note This variable is set from CONFIG_NUMBER_OF_LEDS Kconfig
  */
-#define LAMPARRAY_NUMBER_LED 1
+#define LAMPARRAY_NUMBER_LED CONFIG_NUMBER_OF_LEDS
 
 /**
  * @brief Beginning of the LampArray HID report descriptor
@@ -96,11 +92,24 @@
         HID_COLLECTION(HID_COLLECTION_APPLICATION)
 
 /**
+ * @brief All of the 6 report types ordered
+ */
+enum LampArrayReportType
+{
+    LAMPARRAY_ATTRIBUTES_REPORT = 1,
+    LAMPARRAY_ATTRIBUTES_REQUEST_REPORT = 2,
+    LAMPARRAY_ATTRIBUTES_RESPONSE_REPORT = 3,
+    LAMPARRAY_MULTIUPDATE_REPORT = 4,
+    LAMPARRAY_RANGE_UPDATE_REPORT = 5,
+    LAMPARRAY_CONTROL_REPORT = 6,
+};
+
+/**
  * @brief LampArray HID first report descriptor
  * @note LampArrayAttributesReport
  */
 #define HID_LAMPARRAY_REPORT_1                                            \
-    HID_REPORT_ID(1),                                                     \
+    HID_REPORT_ID(LAMPARRAY_ATTRIBUTES_REPORT),                           \
         HID_USAGE(__LAMPARRAY_ATTRIBUTES_REPORT_USAGE),                   \
         HID_COLLECTION(HID_COLLECTION_LOGICAL),                           \
         HID_USAGE(__LAMPARRAY_LAMPCOUNT_USAGE),                           \
@@ -109,10 +118,10 @@
         HID_REPORT_SIZE(16),                                              \
         HID_REPORT_COUNT(1),                                              \
         HID_FEATURE(__FEATURE_CST_VAR_ABS), /* Feature(Cnst, Var, Abs) */ \
-        HID_USAGE(__LAMPARRAY_BOUNDING_BIX_WIDTH_USAGE),                  \
-        HID_USAGE(__LAMPARRAY_BOUNDING_BIX_HEIGHT_USAGE),                 \
-        HID_USAGE(__LAMPARRAY_BOUNDING_BIX_DEPTH_USAGE),                  \
-        HID_USAGE(LAMPARRAY_KIND),                                        \
+        HID_USAGE(__LAMPARRAY_BOUNDING_BOX_WIDTH_USAGE),                  \
+        HID_USAGE(__LAMPARRAY_BOUNDING_BOX_HEIGHT_USAGE),                 \
+        HID_USAGE(__LAMPARRAY_BOUNDING_BOX_DEPTH_USAGE),                  \
+        HID_USAGE(__LAMPARRAY_KIND_USAGE),                                \
         HID_USAGE(__LAMPARRAY_MINUPDTINTUS_USAGE),                        \
         HID_LOGICAL_MIN8(0),                                              \
         HID_LOGICAL_MAX32(0xFF, 0xFF, 0xFF, 0x7F), /* 2147483647 */       \
@@ -126,7 +135,7 @@
  * @note LampAttributesRequestReport
  */
 #define HID_LAMPARRAY_REPORT_2                                             \
-    HID_REPORT_ID(2),                                                      \
+    HID_REPORT_ID(LAMPARRAY_ATTRIBUTES_REQUEST_REPORT),                    \
         HID_USAGE(__LAMPARRAY_ATTRIBUTES_REQUEST_REPORT),                  \
         HID_COLLECTION(HID_COLLECTION_LOGICAL),                            \
         HID_USAGE(__LAMPARRAY_LAMPID_USAGE),                               \
@@ -142,7 +151,7 @@
  * @note LampAttributesResponseReport
  */
 #define HID_LAMPARRAY_REPORT_3                                             \
-    HID_REPORT_ID(3),                                                      \
+    HID_REPORT_ID(LAMPARRAY_ATTRIBUTES_RESPONSE_REPORT),                   \
         HID_USAGE(__LAMPARRAY_ATTRIBUTES_RESPONSE_REPORT),                 \
         HID_COLLECTION(HID_COLLECTION_LOGICAL),                            \
         HID_USAGE(__LAMPARRAY_LAMPID_USAGE),                               \
@@ -179,7 +188,7 @@
  * @note LampMultiUpdateReport: Define each of the LEDs
  */
 #define HID_LAMPARRAY_REPORT_4_BEGIN                                       \
-    HID_REPORT_ID(4),                                                      \
+    HID_REPORT_ID(LAMPARRAY_MULTIUPDATE_REPORT),                           \
         HID_USAGE(__LAMPARRAY_MULTIUPDATE_REPORT_USAGE),                   \
         HID_COLLECTION(HID_COLLECTION_LOGICAL),                            \
         HID_USAGE(__LAMPARRAY_LAMPCOUNT_USAGE),                            \
@@ -223,7 +232,7 @@
  * @note LampRangeUpdateReport
  */
 #define HID_LAMPARRAY_REPORT_5                                             \
-    HID_REPORT_ID(5),                                                      \
+    HID_REPORT_ID(LAMPARRAY_RANGE_UPDATE_REPORT),                          \
         HID_USAGE(__LAMPARRAY_RANGE_UPDATE_REPORT_USAGE),                  \
         HID_COLLECTION(HID_COLLECTION_LOGICAL),                            \
         HID_USAGE(__LAMPARRAY_UPDATE_FLAGS_USAGE),                         \
@@ -255,7 +264,7 @@
  * @note LampArrayControlReport
  */
 #define HID_LAMPARRAY_REPORT_6                                             \
-    HID_REPORT_ID(6),                                                      \
+    HID_REPORT_ID(LAMPARRAY_CONTROL_REPORT),                               \
         HID_USAGE(__LAMPARRAY_CONTROL_REPORT_USAGE),                       \
         HID_COLLECTION(HID_COLLECTION_LOGICAL),                            \
         HID_USAGE(__LAMPARRAY_AUTONOMOUS_MODE_USAGE),                      \
@@ -269,7 +278,7 @@
 /**
  * @brief LampArray HID last report descriptor
  */
-#define HID_LAMPARRAY_REPORT_END (HID_END_COLLECTION)
+#define HID_LAMPARRAY_REPORT_END HID_END_COLLECTION
 
 /**
  * @brief Compile-time report descriptor

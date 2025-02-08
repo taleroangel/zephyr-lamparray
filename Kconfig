@@ -1,4 +1,12 @@
 menu "LampArray Configurations"
 
+config NUMBER_OF_LEDS
+    int "Number of LEDs to be managed by the device"
+    default 1
+
+config MIN_UPDATE_TIME
+    int "Minimum update time before Host request update"
+    default 250
+
 endmenu
 source "Kconfig.zephyr"
