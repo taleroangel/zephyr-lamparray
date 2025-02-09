@@ -10,7 +10,7 @@ project(zephyr_experiments LANGUAGES C)
 target_include_directories(app PRIVATE "include")
 
 # Append every C file
-file(GLOB SOURCES "src/main.c" "src/error/error.c" "src/hid/hid.c")
+file(GLOB_RECURSE SOURCES "src/*.c")
 
 # Target source files
 target_sources(app PRIVATE ${SOURCES})

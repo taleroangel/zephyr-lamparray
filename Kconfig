@@ -1,5 +1,9 @@
 menu "LampArray Configurations"
 
+config HID_MODULE_LOG_LEVEL
+    int "HID module log level"
+    default LOG_DEFAULT_LEVEL
+
 config NUMBER_OF_LEDS
     int "Number of LEDs to be managed by the device"
     default 1

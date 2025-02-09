@@ -17,7 +17,7 @@
 #include <zephyr/drivers/usb/usb_dc.h>
 #include <zephyr/drivers/usb/udc_buf.h>
 
-LOG_MODULE_REGISTER(hid);
+LOG_MODULE_REGISTER(hid, CONFIG_HID_MODULE_LOG_LEVEL);
 
 /**
  * @brief Check if the usb device is ready to send requests
@@ -110,6 +110,7 @@ static inline void hid_output_ready_isr(const struct device *_)
     k_sem_give(&sem_out_ready);
 }
 
+#ifdef CONFIG_DEBUG
 /**
  * @brief Show 'usb_setup_package' structure contents
  *
@@ -128,6 +129,124 @@ static ALWAYS_INLINE void debug_print_usb_setup_packet(const char *name, struct 
             setup->wIndex,
             setup->wLength);
 }
+#endif
+
+/**
+ * @brief Counter for the requested LampId
+ * This is used by both Get and Set reports
+ */
+static uint16_t current_lamp_id = 0;
+
+/**
+ * @brief Helper function for 'get_attribute_report', writes data to target HID
+ *
+ * @param target Target data structure from HID host
+ * @param target_len  Target data length from HID host
+ * @param data Data to copy into target
+ * @param len Length of the data to copy
+ * @param max_len Max data accepted by host
+ * @return int 0 on Success, -ERRNO otherwise
+ */
+static int hid_report_write_host(
+    uint8_t **target,
+    size_t *target_len,
+    void *data,
+    size_t len,
+    size_t max_len)
+{
+    // Guard for parameters
+    if (target == NULL || target_len == NULL || data == NULL)
+        return -ENOTSUP;
+
+    // Structure doesn't fit HOST frame length
+    if (len > max_len)
+    {
+        LOG_ERR("get_attribute_report: (%d) wont fit in (%d) frame", len, max_len);
+        return -EOVERFLOW;
+    }
+
+    // Copy data to HID device
+    memcpy(*target, data, len);
+    *target_len = len;
+
+    // Return no error;
+    return 0;
+}
+
+/**
+ * @brief Get the attribute report object for sending to the HID host
+ *
+ * @param type Report to be send
+ * @param data Pointer to data to be set
+ * @param len Pointer to length of data transmitted
+ * @param max_len Maximum length allowed
+ * @return int 0 if success, negative errno if failed
+ */
+static int get_attribute_report(
+    enum LampArrayReportType type,
+    uint8_t **data,
+    size_t *len,
+    size_t max_len)
+{
+    // Check arguments
+    if (data == NULL || len == NULL)
+        return -EINVAL;
+
+    // Check which report is being solicited
+    switch (type)
+    {
+    case LAMPARRAY_ATTRIBUTES_REPORT:
+        // TODO: Get actual data
+        const struct LampArrayAttributesReport attributes_report = {
+            .ReportId = LAMPARRAY_ATTRIBUTES_REPORT,
+            .LampCount = LAMPARRAY_NUMBER_LED,
+            .BoundingBoxWidthInMicrometers = 70,
+            .BoundingBoxHeightInMicrometers = 55,
+            .BoundingBoxDepthInMicrometers = 1,
+            .LampArrayKind = LAMPARRAY_KIND_PERIPHERAL,
+            .MinUpdateIntervalInMicroseconds = CONFIG_MIN_UPDATE_TIME,
+        };
+        // Write data to host
+        hid_report_write_host(
+            data, len,
+            (void *)&attributes_report,
+            sizeof(attributes_report), max_len);
+        break;
+
+    case LAMPARRAY_ATTRIBUTES_RESPONSE_REPORT:
+        // TODO: Get actual data
+        const struct LampAttributesResponseReport attributes_response_report = {
+            .ReportId = LAMPARRAY_ATTRIBUTES_RESPONSE_REPORT,
+            .LampId = current_lamp_id,
+            .PositionXInMicrometers = 0,
+            .PositionYInMicrometers = 0,
+            .PositionZInMicrometers = 0,
+            .LampPurposes = LAMPARRAY_PURPOSE_ACCENT,
+            .UpdateLatencyInMicroseconds = CONFIG_MIN_UPDATE_TIME,
+            .RedLevelCount = 0x00,
+            .GreenLevelCount = 0x00,
+            .BlueLevelCount = 0x000,
+            .IntensityLevelCount = 0x00,
+            .IsProgrammable = true,
+            .InputBinding = 0x00,
+        };
+        // Write data to host
+        hid_report_write_host(
+            data, len,
+            (void *)&attributes_response_report,
+            sizeof(attributes_response_report), max_len);
+        // Important! LampArray specifies that this should increment
+        //! Carefull with overflowing this counter, this should reset at max number of LEDs
+        current_lamp_id = (current_lamp_id + 1) % CONFIG_NUMBER_OF_LEDS;
+        break;
+
+    default:
+        LOG_ERR("get_attribute_report: no report for (%d)", type);
+        return -ENOTSUP;
+    }
+
+    return 0;
+}
 
 /**
  * @brief Set the attribute report object
@@ -137,7 +256,10 @@ static ALWAYS_INLINE void debug_print_usb_setup_packet(const char *name, struct 
  * @param len Length of input data
  * @return 0 on success, negative errno on failure
  */
-static int set_attribute_report(enum LampArrayReportType report, const uint8_t *data, size_t len)
+static int set_attribute_report(
+    enum LampArrayReportType report,
+    const uint8_t *data,
+    size_t len)
 {
     // Check arguments
     if (data == NULL || len == 0)
@@ -145,14 +267,43 @@ static int set_attribute_report(enum LampArrayReportType report, const uint8_t *
 
     switch (report)
     {
+    case LAMPARRAY_ATTRIBUTES_REQUEST_REPORT:
+        struct LampAttributesRequestReport attributes_request_report = {};
+        memcpy(&attributes_request_report, data, len);
+        LOG_DBG("LampAttributesRequestReport { .LampId = %d }", attributes_request_report.LampId);
+        // Set the LampID for subsequent calls
+        current_lamp_id = attributes_request_report.LampId;
+        break;
+
     case LAMPARRAY_CONTROL_REPORT:
-        struct LampArrayControlReport report = {};
-        memcpy(&report, data, len);
-        LOG_INF("LampArrayControlReport { .AutonomousMode = %d }", report.AutonomousMode);
+        struct LampArrayControlReport control_report = {};
+        memcpy(&control_report, data, len);
+        LOG_DBG("LampArrayControlReport { .AutonomousMode = %d }", control_report.AutonomousMode);
+        break;
+
+    case LAMPARRAY_RANGE_UPDATE_REPORT:
+        struct LampRangeUpdateRecord range_update_report = {};
+        memcpy(&range_update_report, data, len);
+        LOG_DBG("LampRangeUpdateRecord { "
+                "\n\t.LampUpdateFlags = %d, "
+                "\n\t.LampIdStart = %d, "
+                "\n\t.LampIdEnd = %d, "
+                "\n\t.RedUpdateChannel = %d, "
+                "\n\t.GreenUpdateChannel = %d, "
+                "\n\t.BlueUpdateChannel = %d, "
+                "\n\t.IntensityUpdateChannel = %d }",
+                range_update_report.LampUpdateFlags,
+                range_update_report.LampIdStart,
+                range_update_report.LampIdEnd,
+                range_update_report.RedUpdateChannel,
+                range_update_report.GreenUpdateChannel,
+                range_update_report.BlueUpdateChannel,
+                range_update_report.IntensityUpdateChannel);
         break;
 
     default:
         // Operation not supported
+        LOG_INF("set_attribute_report: (%d) not supported", report);
         return -ENOTSUP;
     }
 
@@ -169,9 +320,12 @@ static int hid_get_report(
     int32_t *len,
     uint8_t **data)
 {
+#ifdef CONFIG_DEBUG
     debug_print_usb_setup_packet("GetReport", setup);
+#endif
 
     // Check operation type
+    int err = 0;
     if (setup->bRequest != HID_REPORT_REQUEST_KIND_GET_REPORT)
     {
         LOG_WRN("GetReport: [bRequest] (%d) ignored", setup->bRequest);
@@ -193,39 +347,27 @@ static int hid_get_report(
         return -ENOTSUP;
     }
 
-    // Check which report is being solicited
-    switch (report_id)
+    // Get the report
+    switch (report_type)
     {
-    case LAMPARRAY_ATTRIBUTES_REPORT:
-        /* Return LampArrayAttributes */
-        const struct LampArrayAttributesReport attributes_report = {
-            .ReportId = LAMPARRAY_ATTRIBUTES_REPORT,
-            .LampCount = LAMPARRAY_NUMBER_LED,
-            .BoundingBoxWidthInMicrometers = 70,
-            .BoundingBoxHeightInMicrometers = 55,
-            .BoundingBoxDepthInMicrometers = 1,
-            .LampArrayKind = LAMPARRAY_KIND_PERIPHERAL,
-            .MinUpdateIntervalInMicroseconds = CONFIG_MIN_UPDATE_TIME,
-        };
-
-        // Structure doesn't fit HOST frame length
-        if (sizeof(attributes_report) > setup->wLength)
+    case HID_REPORT_TYPE_FEATURE:
+        // Get the report being solicited
+        if ((err = get_attribute_report(
+                 (enum LampArrayReportType)report_id,
+                 data, len, setup->wLength)) < 0)
         {
-            LOG_ERR("GetReport: (%d) wont fit in (%d) frame",
-                    sizeof(attributes_report), setup->wLength);
-            return -EOVERFLOW;
+            LOG_ERR("GetReport: failed to get attribute reports (errno=%d)", err);
+            return err;
         }
-
-        // Copy data
-        memcpy(*data, &attributes_report, sizeof(attributes_report));
-        *len = sizeof(attributes_report);
-
-        return 0;
+        break;
 
     default:
-        LOG_ERR("GetReport: bad index (%d)", report_id);
+        LOG_ERR("GetReport: bad index (%d)", report_type);
         return -ENOTSUP;
     }
+
+    // No return data (err = 0 on success)
+    return err;
 }
 
 /**
@@ -238,10 +380,12 @@ static int hid_set_report(
     int32_t *len,
     uint8_t **data)
 {
-    int err = 0;
+#ifdef CONFIG_DEBUG
     debug_print_usb_setup_packet("SetReport", setup);
+#endif
 
     // Check operation type
+    int err = 0;
     if (setup->bRequest != HID_REPORT_REQUEST_KIND_SET_REPORT)
     {
         LOG_WRN("SetReport: [bRequest] (%d) ignored", setup->bRequest);
@@ -275,7 +419,7 @@ static int hid_set_report(
         return -ENOTSUP;
     }
 
-    // No return data
+    // No return data (err = 0 on success)
     return err;
 }
 
@@ -287,7 +431,7 @@ static const struct hid_ops hid_callback_ops = {
     .int_in_ready = hid_input_ready_isr,
     // Host is ready to accept incoming data
     .int_out_ready = hid_output_ready_isr,
-    /* HID report data */
+    // HID report data
     .get_report = hid_get_report,
     .set_report = hid_set_report,
 };
@@ -313,7 +457,7 @@ static int hid_interface_init(const struct device *hid_device)
     k_mutex_lock(&mtx_usb_device, K_FOREVER);
 
     // Log the hexdump of the 'hid_report_desc'
-    LOG_HEXDUMP_INF(
+    LOG_HEXDUMP_DBG(
         hid_report_desc, sizeof(hid_report_desc),
         "USB HID Report Descriptor");
 
@@ -326,7 +470,7 @@ static int hid_interface_init(const struct device *hid_device)
         &hid_callback_ops);
 
     // Log the hexdump of the 'hid_report_desc'
-    LOG_INF("(Registered) HID Report Descriptor");
+    LOG_INF("Device registered");
 
     // Initialize the HID Class
     if ((err = usb_hid_init(hid_device)) < 0)
@@ -344,7 +488,7 @@ static int hid_interface_init(const struct device *hid_device)
     }
 
     // Return sucess
-    LOG_INF("(Ready) USB Interface");
+    LOG_INF("USB interface ready");
     return 0;
 }
 
