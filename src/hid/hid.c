@@ -21,36 +21,6 @@
 LOG_MODULE_REGISTER(hid, CONFIG_HID_MODULE_LOG_LEVEL);
 
 /**
- * @brief Check if the usb device is ready to send requests
- */
-static volatile bool usb_is_ready = false;
-
-/**
- * @brief Semaphore to indicate the USB interface is ready
- * @note Take this semaphore when {usb_is_ready} is false, this will block until
- * the interface is once again ready.
- */
-static K_SEM_DEFINE(sem_usb_ready, 0, 1);
-
-/**
- * @brief Semaphore to indicate the USB HID input transfer was successfull and a new transfer is possible
- * @note Take this semaphore after doing some operation to wait for the previous transfer to complete
- */
-static K_SEM_DEFINE(sem_in_ready, 0, 1);
-
-/**
- * @brief Semaphore to indicate the USB HID output transfer was successfull and a new transfer is possible
- * @note Take this semaphore after doing some operation to wait for the previous transfer to complete
- */
-static K_SEM_DEFINE(sem_out_ready, 0, 1);
-
-/**
- * @brief Mutex for exclusive access to the hid_device
- * @note Use this before any operation on the USB device
- */
-static K_MUTEX_DEFINE(mtx_usb_device);
-
-/**
  * @brief Report descriptor for the HID interface
  * @note Keep this variable in static memory, if not program will fail
  */
@@ -73,42 +43,19 @@ static inline void usb_status_isr(
         application_panic(USB_DC_ERROR, 0);
         break;
 
-    // USB interface is ready, signal threads
+    // USB interface is ready
     case USB_DC_CONNECTED:
         [[fallthrough]];
     case USB_DC_CONFIGURED:
-        // Signal the USB interface is ready
-        usb_is_ready = true;
-        k_sem_give(&sem_usb_ready);
         break;
 
     // USB interface is not ready
     case USB_DC_DISCONNECTED:
         [[fallthrough]];
     default:
-        usb_is_ready = false;
+        // TODO: Enable autonomous mode
         break;
     }
-}
-
-/**
- * @brief Callback when current USB HID Input operation has been completed
- */
-static inline void hid_input_ready_isr(const struct device *_)
-{
-    ARG_UNUSED(_);
-    // Give semaphore to indicate availability
-    k_sem_give(&sem_in_ready);
-}
-
-/**
- * @brief Callback when current USB HID Output operation has been completed
- */
-static inline void hid_output_ready_isr(const struct device *_)
-{
-    ARG_UNUSED(_);
-    // Give semaphore to indicate availability
-    k_sem_give(&sem_out_ready);
 }
 
 #ifdef CONFIG_DEBUG
@@ -120,7 +67,11 @@ static inline void hid_output_ready_isr(const struct device *_)
  */
 static ALWAYS_INLINE void debug_print_usb_setup_packet(const char *name, struct usb_setup_packet *setup)
 {
-    LOG_INF("%s: UsbSetupPacket\n\tbmRequestType = (Recipient: %01X, Type: %01x, Direction: %01x)\n\tbRequest = %02X\n\twValue = %04X\n\twIndex = %04x\n\twLength = %04x",
+    LOG_DBG("%s: UsbSetupPacket\n\tbmRequestType = (Recipient: %01X, Type: %01x, Direction: %01x)"
+            "\n\tbRequest = %02X"
+            "\n\twValue = %04X"
+            "\n\twIndex = %04x"
+            "\n\twLength = %04x",
             name,
             setup->RequestType.recipient,
             setup->RequestType.type,
@@ -236,7 +187,7 @@ static int get_attribute_report(
             data, len,
             (void *)&attributes_response_report,
             sizeof(attributes_response_report), max_len);
-        // Important! LampArray specifies that this should increment
+        // Important! LampArray specifies that this should increment on each call
         //! Carefull with overflowing this counter, this should reset at max number of LEDs
         current_lamp_id = (current_lamp_id + 1) % CONFIG_NUMBER_OF_LEDS;
         break;
@@ -490,11 +441,6 @@ static int hid_set_report(
  * @brief Callbacks for USB HID Class status change.
  */
 static const struct hid_ops hid_callback_ops = {
-    // Host is ready to accept outgoing data
-    .int_in_ready = hid_input_ready_isr,
-    // Host is ready to accept incoming data
-    .int_out_ready = hid_output_ready_isr,
-    // HID report data
     .get_report = hid_get_report,
     .set_report = hid_set_report,
 };
@@ -515,9 +461,6 @@ static int hid_interface_init(const struct device *hid_device)
     {
         return -EINVAL;
     }
-
-    // Get lock on USB device
-    k_mutex_lock(&mtx_usb_device, K_FOREVER);
 
     // Log the hexdump of the 'hid_report_desc'
     LOG_HEXDUMP_DBG(
@@ -540,9 +483,6 @@ static int hid_interface_init(const struct device *hid_device)
     {
         return err;
     }
-
-    // Release the USB device
-    k_mutex_unlock(&mtx_usb_device);
 
     // Enable the USB interface
     if ((err = usb_enable(usb_status_isr)) < 0)
