@@ -1,4 +1,4 @@
-#include "error.h"
+#include "error/error.h"
 
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>

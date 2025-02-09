@@ -7,7 +7,7 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(zephyr_experiments LANGUAGES C)
 
 # Include header
-target_include_directories(app PRIVATE "src")
+target_include_directories(app PRIVATE "include")
 
 # Append every C file
 file(GLOB SOURCES "src/main.c" "src/error/error.c" "src/hid/hid.c")

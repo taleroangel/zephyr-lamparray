@@ -1,5 +1,6 @@
-#include "descriptor.h"
-#include "reports.h"
+#include "private/descriptor.h"
+#include "private/reports.h"
+
 #include "hid/hid.h"
 #include "error/error.h"
 
@@ -9,14 +10,10 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
-
 #include <zephyr/logging/log.h>
-
 #include <zephyr/sys/byteorder.h>
-
 #include <zephyr/usb/usb_device.h>
 #include <zephyr/usb/class/usb_hid.h>
-
 #include <zephyr/drivers/usb/usb_dc.h>
 #include <zephyr/drivers/usb/udc_buf.h>
 
@@ -38,7 +35,13 @@ static K_SEM_DEFINE(sem_usb_ready, 0, 1);
  * @brief Semaphore to indicate the USB HID input transfer was successfull and a new transfer is possible
  * @note Take this semaphore after doing some operation to wait for the previous transfer to complete
  */
-static K_SEM_DEFINE(sem_transfer_complete, 0, 1);
+static K_SEM_DEFINE(sem_in_ready, 0, 1);
+
+/**
+ * @brief Semaphore to indicate the USB HID output transfer was successfull and a new transfer is possible
+ * @note Take this semaphore after doing some operation to wait for the previous transfer to complete
+ */
+static K_SEM_DEFINE(sem_out_ready, 0, 1);
 
 /**
  * @brief Mutex for exclusive access to the hid_device
@@ -70,6 +73,8 @@ static inline void usb_status_isr(
         break;
 
     // USB interface is ready, signal threads
+    case USB_DC_CONNECTED:
+        [[fallthrough]];
     case USB_DC_CONFIGURED:
         // Signal the USB interface is ready
         usb_is_ready = true;
@@ -86,17 +91,32 @@ static inline void usb_status_isr(
 }
 
 /**
- * @brief Callback when current USB HID Input has been completed
+ * @brief Callback when current USB HID Input operation has been completed
  */
 static inline void hid_input_ready_isr(const struct device *_)
 {
     ARG_UNUSED(_);
     // Give semaphore to indicate availability
-    k_sem_give(&sem_transfer_complete);
+    k_sem_give(&sem_in_ready);
 }
 
-/** TODO: Remove this, auxiliary debugging function */
-static ALWAYS_INLINE void __print_usb_setup_packet(const char *name, struct usb_setup_packet *setup)
+/**
+ * @brief Callback when current USB HID Output operation has been completed
+ */
+static inline void hid_output_ready_isr(const struct device *_)
+{
+    ARG_UNUSED(_);
+    // Give semaphore to indicate availability
+    k_sem_give(&sem_out_ready);
+}
+
+/**
+ * @brief Show 'usb_setup_package' structure contents
+ *
+ * @param name Name of the calling function
+ * @param setup 'usb_setup_package' structure
+ */
+static ALWAYS_INLINE void debug_print_usb_setup_packet(const char *name, struct usb_setup_packet *setup)
 {
     LOG_INF("%s: UsbSetupPacket\n\tbmRequestType = (Recipient: %01X, Type: %01x, Direction: %01x)\n\tbRequest = %02X\n\twValue = %04X\n\twIndex = %04x\n\twLength = %04x",
             name,
@@ -109,13 +129,47 @@ static ALWAYS_INLINE void __print_usb_setup_packet(const char *name, struct usb_
             setup->wLength);
 }
 
+/**
+ * @brief Set the attribute report object
+ *
+ * @param report Attribute report number
+ * @param data Raw data from host
+ * @param len Length of input data
+ * @return 0 on success, negative errno on failure
+ */
+static int set_attribute_report(enum LampArrayReportType report, const uint8_t *data, size_t len)
+{
+    // Check arguments
+    if (data == NULL || len == 0)
+        return -EINVAL;
+
+    switch (report)
+    {
+    case LAMPARRAY_CONTROL_REPORT:
+        struct LampArrayControlReport report = {};
+        memcpy(&report, data, len);
+        LOG_INF("LampArrayControlReport { .AutonomousMode = %d }", report.AutonomousMode);
+        break;
+
+    default:
+        // Operation not supported
+        return -ENOTSUP;
+    }
+
+    return 0;
+}
+
+/**
+ * @brief Send attribute reports to the host
+ * @note Callback for 'hid_ops'
+ */
 static int hid_get_report(
     const struct device *dev,
     struct usb_setup_packet *setup,
     int32_t *len,
     uint8_t **data)
 {
-    __print_usb_setup_packet("GetReport", setup);
+    debug_print_usb_setup_packet("GetReport", setup);
 
     // Check operation type
     if (setup->bRequest != HID_REPORT_REQUEST_KIND_GET_REPORT)
@@ -133,7 +187,7 @@ static int hid_get_report(
     uint8_t report_type = request_buffer[1];
 
     // Check if requesting feature
-    if (report_type != HID_REPORT_TYPE_FEATURE)
+    if (report_type != HID_REPORT_TYPE_FEATURE && report_type != HID_REPORT_TYPE_INPUT)
     {
         LOG_ERR("GetReport: HidReportType [wValueH] not supported (%d)", report_type);
         return -ENOTSUP;
@@ -147,10 +201,10 @@ static int hid_get_report(
         const struct LampArrayAttributesReport attributes_report = {
             .ReportId = LAMPARRAY_ATTRIBUTES_REPORT,
             .LampCount = LAMPARRAY_NUMBER_LED,
-            .BoundingBoxWidthInMicrometers = 250000,
-            .BoundingBoxHeightInMicrometers = 250000,
-            .BoundingBoxDepthInMicrometers = 250000,
-            .LampArrayKind = LAMPARRAY_KIND_CHASSIS,
+            .BoundingBoxWidthInMicrometers = 70,
+            .BoundingBoxHeightInMicrometers = 55,
+            .BoundingBoxDepthInMicrometers = 1,
+            .LampArrayKind = LAMPARRAY_KIND_PERIPHERAL,
             .MinUpdateIntervalInMicroseconds = CONFIG_MIN_UPDATE_TIME,
         };
 
@@ -164,33 +218,75 @@ static int hid_get_report(
 
         // Copy data
         memcpy(*data, &attributes_report, sizeof(attributes_report));
+        *len = sizeof(attributes_report);
+
         return 0;
 
     default:
-        LOG_ERR("GetReport: bad index (%d)", request_buffer[0]);
+        LOG_ERR("GetReport: bad index (%d)", report_id);
         return -ENOTSUP;
     }
 }
 
+/**
+ * @brief Set attribute report data given from host
+ * @note Callback for 'hid_ops'
+ */
 static int hid_set_report(
     const struct device *dev,
     struct usb_setup_packet *setup,
     int32_t *len,
     uint8_t **data)
 {
-    __print_usb_setup_packet("SetReport", setup);
-    LOG_HEXDUMP_INF(*data, *len, "SetReport,Data");
-    memset(*data, 0x55, 8);
+    int err = 0;
+    debug_print_usb_setup_packet("SetReport", setup);
 
-    return 0;
+    // Check operation type
+    if (setup->bRequest != HID_REPORT_REQUEST_KIND_SET_REPORT)
+    {
+        LOG_WRN("SetReport: [bRequest] (%d) ignored", setup->bRequest);
+        return 0;
+    }
+
+    // Get the request data
+    uint8_t request_buffer[2];
+    sys_put_le16(setup->wValue, request_buffer);
+
+    // Get values from request data
+    uint8_t report_id = request_buffer[0];
+    uint8_t report_type = request_buffer[1];
+
+    // Check which report is being set
+    switch (report_type)
+    {
+    case HID_REPORT_TYPE_FEATURE:
+        // Set the attribute report
+        if ((err = set_attribute_report(
+                 (enum LampArrayReportType)report_id,
+                 *data,
+                 setup->wLength)) < 0)
+        {
+            LOG_ERR("SetReport: failed to set attribute reports (errno=%d)", err);
+        }
+        break;
+
+    default:
+        LOG_ERR("SetReport: bad index (%d)", report_type);
+        return -ENOTSUP;
+    }
+
+    // No return data
+    return err;
 }
 
 /**
  * @brief Callbacks for USB HID Class status change.
  */
 static const struct hid_ops hid_callback_ops = {
-    /* This one is important, is it called when USB host is ready to accept input */
+    // Host is ready to accept outgoing data
     .int_in_ready = hid_input_ready_isr,
+    // Host is ready to accept incoming data
+    .int_out_ready = hid_output_ready_isr,
     /* HID report data */
     .get_report = hid_get_report,
     .set_report = hid_set_report,
@@ -274,9 +370,8 @@ void hid_lamparray_main(void *_p1, void *_p2, void *_p3)
         application_panic(ERROR_REASON_HARDWARE, err);
     }
 
-    // Busy wait...
     while (true)
     {
-        k_busy_wait(1000);
+        k_yield();
     }
 }

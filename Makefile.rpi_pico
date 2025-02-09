@@ -13,6 +13,6 @@ ARGS := ${ARGS}\
 # Board name
 BOARD := rpi_pico
 
-.PHONY: restart
-restart:
+.PHONY: reboot
+reboot:
 	$(OPENOCD_PATH) -f interface/${DEBUGGER}.cfg -f target/rp2040.cfg -c "init; reset; exit"

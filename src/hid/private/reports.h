@@ -34,4 +34,10 @@ struct __packed LampAttributesRequestReport
     uint16_t LampId;
 };
 
+struct __packed LampArrayControlReport
+{
+    uint8_t ReportId;
+    uint8_t AutonomousMode : 1;
+};
+
 #endif

@@ -6,7 +6,7 @@ config NUMBER_OF_LEDS
 
 config MIN_UPDATE_TIME
     int "Minimum update time before Host request update"
-    default 250
+    default 25
 
 endmenu
 source "Kconfig.zephyr"
