@@ -1,6 +1,8 @@
 #ifndef __HID_DESCRIPTOR_H__
 #define __HID_DESCRIPTOR_H__
 
+#include "pixel/controller.h"
+
 #include <zephyr/usb/class/usb_hid.h>
 #include <zephyr/sys/util_macro.h>
 
@@ -79,9 +81,9 @@
 
 /**
  * @brief Number of LEDs in LampArray
- * @note This variable is set from CONFIG_NUMBER_OF_LEDS Kconfig
+ * @note This variable is set from PIXEL_NUMBER_OF_LEDS
  */
-#define LAMPARRAY_NUMBER_LED CONFIG_NUMBER_OF_LEDS
+#define LAMPARRAY_NUMBER_LED PIXEL_NUMBER_OF_LEDS
 
 /**
  * @brief Beginning of the LampArray HID report descriptor

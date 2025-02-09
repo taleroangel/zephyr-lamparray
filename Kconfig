@@ -1,16 +1,17 @@
 menu "LampArray Configurations"
 
+config PIXEL_MODULE_LOG_LEVEL
+    int "PIXEL module log level"
+    default LOG_DEFAULT_LEVEL
+
 config HID_MODULE_LOG_LEVEL
     int "HID module log level"
     default LOG_DEFAULT_LEVEL
 
-config NUMBER_OF_LEDS
-    int "Number of LEDs to be managed by the device"
-    default 1
-
 config MIN_UPDATE_TIME
     int "Minimum update time before Host request update"
-    default 25
+    default 50
 
 endmenu
+
 source "Kconfig.zephyr"

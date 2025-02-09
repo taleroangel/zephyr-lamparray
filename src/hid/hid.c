@@ -189,7 +189,7 @@ static int get_attribute_report(
             sizeof(attributes_response_report), max_len);
         // Important! LampArray specifies that this should increment on each call
         //! Carefull with overflowing this counter, this should reset at max number of LEDs
-        current_lamp_id = (current_lamp_id + 1) % CONFIG_NUMBER_OF_LEDS;
+        current_lamp_id = (current_lamp_id + 1) % LAMPARRAY_NUMBER_LED;
         break;
 
     default:
@@ -497,12 +497,12 @@ static int hid_interface_init(const struct device *hid_device)
 
 void hid_lamparray_main(void *_p1, void *_p2, void *_p3)
 {
-    int err = 0;
-
     // Notify compiler about unused arguments
     ARG_UNUSED(_p1);
     ARG_UNUSED(_p2);
     ARG_UNUSED(_p3);
+
+    int err = 0;
 
     // Get the HID device binding
     const struct device *hid_device = device_get_binding("HID_0");

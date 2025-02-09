@@ -18,11 +18,16 @@ typedef uint8_t color_t;
  */
 struct pixel_update_data
 {
-    pixel_id_t id ;
+    pixel_id_t id;
     color_t red;
     color_t green;
     color_t blue;
     color_t intensity;
 };
+
+/**
+ * @brief Pixel (LED) controller thread
+ */
+void pixel_controller_main(void *_p1, void *_p2, void *_p3);
 
 #endif

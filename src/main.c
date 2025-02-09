@@ -1,6 +1,8 @@
 #include <app_version.h>
-#include <hid/hid.h>
+
 #include <error/error.h>
+#include <hid/hid.h>
+#include <pixel/controller.h>
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -14,6 +16,16 @@ void k_sys_fatal_error_handler(unsigned int reason, const struct arch_esf *esf)
 {
     panic_handler(reason, esf);
 }
+
+/* Declare the Pixel controller thread handler */
+K_THREAD_DEFINE(
+    pixel_controller_thread,
+    PIXEL_CONTROLLER_THREAD_STACK_SIZE,
+    pixel_controller_main,
+    /* arguments */
+    NULL, NULL, NULL,
+    PIXEL_CONTROLLER_THREAD_PRIORITY,
+    K_ESSENTIAL, 0);
 
 /* Declare the LampArray HID thread handler */
 K_THREAD_DEFINE(
