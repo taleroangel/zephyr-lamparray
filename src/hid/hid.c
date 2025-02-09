@@ -3,6 +3,7 @@
 
 #include "hid/hid.h"
 #include "error/error.h"
+#include "pixel/controller.h"
 
 #include <stdlib.h>
 #include <errno.h>
@@ -265,6 +266,9 @@ static int set_attribute_report(
     if (data == NULL || len == 0)
         return -EINVAL;
 
+    // Errno code
+    int err;
+
     switch (report)
     {
     case LAMPARRAY_ATTRIBUTES_REQUEST_REPORT:
@@ -275,10 +279,63 @@ static int set_attribute_report(
         current_lamp_id = attributes_request_report.LampId;
         break;
 
-    case LAMPARRAY_CONTROL_REPORT:
-        struct LampArrayControlReport control_report = {};
-        memcpy(&control_report, data, len);
-        LOG_DBG("LampArrayControlReport { .AutonomousMode = %d }", control_report.AutonomousMode);
+    case LAMPARRAY_MULTIUPDATE_REPORT:
+        // Special case here, Report #4 handles variable length
+        size_t copied_bytes = 0;
+
+        // Copy header
+        struct LampMultiUpdateReport_Begin multiupdate_begin = {};
+        memcpy(&multiupdate_begin, data, sizeof(multiupdate_begin));
+        copied_bytes += sizeof(multiupdate_begin);
+
+        // Allocate space for pixel data
+        struct pixel_multiupdate_request *update_req = NULL;
+        if ((err = new_pixel_multiupdate_request(
+                 &update_req, multiupdate_begin.LampCount)) < 0)
+        {
+            LOG_ERR("set_attribute_report: Failed to allocate (errno=%d)", err);
+            return err;
+        }
+
+        // Get the LampId records first
+        for (size_t i = 0; i < multiupdate_begin.LampCount; i++)
+        {
+            // Read data from host
+            struct LampMultiUpdateReport_LampId lamp_id = {};
+            memcpy(&lamp_id, (data + copied_bytes), sizeof(lamp_id));
+            copied_bytes += sizeof(lamp_id);
+
+            // Set update request
+            update_req->data[i].id = lamp_id.LampId;
+        }
+
+        // Get the update channel data at last
+        for (size_t i = 0; i < multiupdate_begin.LampCount; i++)
+        {
+            // Read data from host
+            struct LampMultiUpdateReport_UpdateChannels update_channels = {};
+            memcpy(&update_channels, (data + copied_bytes), sizeof(update_channels));
+            copied_bytes += sizeof(update_channels);
+
+            // Set update request
+            update_req->data[i].red = update_channels.RedUpdateChannel;
+            update_req->data[i].green = update_channels.GreenUpdateChannel;
+            update_req->data[i].blue = update_channels.BlueUpdateChannel;
+            update_req->data[i].intensity = update_channels.IntensityUpdateChannel;
+        }
+
+        // Check that data matches
+        if (copied_bytes != len)
+        {
+            LOG_ERR("set_attribute_report: data mismatch (len=%d, recv=%d)", len, copied_bytes);
+            // Dispose of allocated data
+            dispose_pixel_multiupdate_request(&update_req);
+            return -EINVAL;
+        }
+
+        // TODO: Remove this once the structure is passed to the controller
+        // The controller should be the one that disposes the object
+        dispose_pixel_multiupdate_request(&update_req);
         break;
 
     case LAMPARRAY_RANGE_UPDATE_REPORT:
@@ -299,6 +356,12 @@ static int set_attribute_report(
                 range_update_report.GreenUpdateChannel,
                 range_update_report.BlueUpdateChannel,
                 range_update_report.IntensityUpdateChannel);
+        break;
+
+    case LAMPARRAY_CONTROL_REPORT:
+        struct LampArrayControlReport control_report = {};
+        memcpy(&control_report, data, len);
+        LOG_DBG("LampArrayControlReport { .AutonomousMode = %d }", control_report.AutonomousMode);
         break;
 
     default:

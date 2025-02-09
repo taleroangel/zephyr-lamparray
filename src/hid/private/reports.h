@@ -1,3 +1,17 @@
+/**
+ * @file reports.h
+ * @author Angel Talero (angelgotalero@outlook.com)
+ * @brief Structs for HID reports on LampArray, USB data from the Report Descriptor
+ * is directly mapped to structures on this file
+ * @note Naming is in CamelCase as opposed to snake_case like the rest of the project
+ * because this is what the USB convention is. "When in Rome, do as Romans do"
+ * @version 0.1
+ * @date 2025-02-09
+ *
+ * @copyright Copyright (c) 2025
+ *
+ */
+
 #ifndef __HID_REPORTS_H__
 #define __HID_REPORTS_H__
 
@@ -76,6 +90,38 @@ struct __packed LampAttributesResponseReport
     uint8_t IntensityLevelCount;
     uint8_t IsProgrammable;
     uint8_t InputBinding;
+};
+
+/**
+ * @brief Report #4 (First Half)
+ * @note Report #4 is tricky because it comes in parts, make sure to join it in a proper way
+ */
+struct __packed LampMultiUpdateReport_Begin
+{
+    uint8_t ReportId;
+    uint64_t LampCount;
+    uint8_t LampUpdateFlags;
+};
+
+/**
+ * @brief Comes after LampMultiUpdateReport_Begin, repeats itself
+ * for every lamp in LampCount
+ */
+struct __packed LampMultiUpdateReport_LampId
+{
+    uint16_t LampId;
+};
+
+/**
+ * @brief Comes after all the LampMultiUpdateReport_LampId elements,
+ * repeats itself for every lamp in LampCount
+ */
+struct __packed LampMultiUpdateReport_UpdateChannels
+{
+    uint8_t RedUpdateChannel;
+    uint8_t GreenUpdateChannel;
+    uint8_t BlueUpdateChannel;
+    uint8_t IntensityUpdateChannel;
 };
 
 /**
