@@ -1,3 +1,14 @@
+/**
+ * @file request.h
+ * @author Angel Talero (angelgotalero@outlook.com)
+ * @brief Definitions for sending requests for the Pixel Controller
+ * @version 0.1
+ * @date 2025-02-09
+ * 
+ * @copyright Copyright (c) 2025
+ * 
+ */
+
 #ifndef __PIXEL_REQUEST_H__
 #define __PIXEL_REQUEST_H__
 

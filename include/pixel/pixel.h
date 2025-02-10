@@ -1,3 +1,14 @@
+/**
+ * @file pixel.h
+ * @author Angel Talero (angelgotalero@outlook.com)
+ * @brief Pixel data definitions
+ * @version 0.1
+ * @date 2025-02-09
+ * 
+ * @copyright Copyright (c) 2025
+ * 
+ */
+
 #ifndef __PIXEL_H__
 #define __PIXEL_H__
 

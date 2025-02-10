@@ -1,3 +1,14 @@
+/**
+ * @file descriptor.h
+ * @author Angel Talero (angelgotalero@outlook.com)
+ * @brief HID Report Descriptor utilities and definitions
+ * @version 0.1
+ * @date 2025-02-09
+ * 
+ * @copyright Copyright (c) 2025
+ * 
+ */
+
 #ifndef __HID_DESCRIPTOR_H__
 #define __HID_DESCRIPTOR_H__
 

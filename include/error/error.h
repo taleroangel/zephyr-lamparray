@@ -1,3 +1,14 @@
+/**
+ * @file error.h
+ * @author Angel Talero (angelgotalero@outlook.com)
+ * @brief Error handling codes and functions
+ * @version 0.1
+ * @date 2025-02-09
+ *
+ * @copyright Copyright (c) 2025
+ *
+ */
+
 #ifndef __ERROR_H__
 #define __ERROR_H__
 
@@ -10,13 +21,13 @@
  */
 typedef enum __ERROR_REASONS_T
 {
-    ERROR_REASON_UNKNOWN,
-    ERROR_REASON_EARLY_TERMINATION,
-    ERROR_REASON_OOM,
-    ERROR_REASON_HARDWARE,
-    ERROR_REASON_USB,
-    ERROR_REASON_ZBUS,
-    ERROR_REASON_BAD_INSTRUCTION
+    ERROR_REASON_UNKNOWN = 0x00,
+    ERROR_REASON_EARLY_TERMINATION = 0x01,
+    ERROR_REASON_OOM = 0x02,
+    ERROR_REASON_HARDWARE = 0x03,
+    ERROR_REASON_USB = 0x04,
+    ERROR_REASON_ZBUS = 0x05,
+    ERROR_REASON_BAD_INSTRUCTION = 0x06
 } error_reason_t;
 
 /**
