@@ -166,8 +166,8 @@ static int get_attribute_report(
             .BoundingBoxWidthInMicrometers = LAMP_BOUNDING_BOX_WH,
             .BoundingBoxHeightInMicrometers = LAMP_BOUNDING_BOX_WH,
             .BoundingBoxDepthInMicrometers = LAMP_BOUNDING_BOX_DEPTH,
-            .LampArrayKind = LAMPARRAY_KIND_PERIPHERAL,
-            .MinUpdateIntervalInMicroseconds = CONFIG_MIN_UPDATE_TIME,
+            .LampArrayKind = CONFIG_LAMPARRAY_KIND,
+            .MinUpdateIntervalInMicroseconds = CONFIG_MIN_PIXEL_UPDATE_TIME,
         };
         // Write data to host
         hid_report_write_host(
@@ -185,7 +185,7 @@ static int get_attribute_report(
             .PositionYInMicrometers = (LAMP_BOUNDING_BOX_WH * current_lamp_id),
             .PositionZInMicrometers = (LAMP_BOUNDING_BOX_DEPTH * current_lamp_id),
             .LampPurposes = LAMPARRAY_PURPOSE_ACCENT,
-            .UpdateLatencyInMicroseconds = CONFIG_MIN_UPDATE_TIME,
+            .UpdateLatencyInMicroseconds = CONFIG_MIN_PIXEL_UPDATE_TIME,
             .RedLevelCount = pixel_data[current_lamp_id].red,
             .GreenLevelCount = pixel_data[current_lamp_id].green,
             .BlueLevelCount = pixel_data[current_lamp_id].blue,
@@ -380,7 +380,7 @@ static int set_attribute_report(
         // Send request to controller
         if ((err = zbus_chan_pub(
                  &pixel_controller_zbus_channel,
-                 &pixctrl_request, K_USEC(CONFIG_MIN_UPDATE_TIME))) < 0)
+                 &pixctrl_request, K_USEC(CONFIG_MIN_PIXEL_UPDATE_TIME))) < 0)
         {
             LOG_ERR("set_attributes_report: zbus error (errno=%d)", err);
             return err;
@@ -411,7 +411,7 @@ static int set_attribute_report(
              &pixel_controller_zbus_channel,
              &pixctrl_request,
              // Update time of each LED
-             K_USEC(CONFIG_MIN_UPDATE_TIME * LAMPARRAY_NUMBER_LED))) < 0)
+             K_USEC(CONFIG_MIN_PIXEL_UPDATE_TIME * LAMPARRAY_NUMBER_LED))) < 0)
     {
         LOG_ERR("set_attributes_report: zbus error (errno=%d)", err);
         return err;

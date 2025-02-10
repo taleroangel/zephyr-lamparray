@@ -1,16 +1,67 @@
 menu "LampArray Configurations"
 
 config PIXEL_MODULE_LOG_LEVEL
-    int "PIXEL module log level"
+    int "'pixel' module log level"
     default LOG_DEFAULT_LEVEL
 
 config HID_MODULE_LOG_LEVEL
-    int "HID module log level"
+    int "'hid' module log level"
     default LOG_DEFAULT_LEVEL
 
-config MIN_UPDATE_TIME
-    int "Minimum update time before Host request update"
+config MIN_PIXEL_UPDATE_TIME
+    int "Minimum pixel update time in microseconds"
     default 150
+    help
+      "Minimum time the HID Host will acknoledge before sending another request to the same pixel"
+
+choice 
+    prompt "LampArrayKind (Type of device)"
+    default LAMPARRAY_KIND_PERIPHERAL
+
+config LAMPARRAY_KIND_KEYBOARD
+    bool "Keyboard"
+
+config LAMPARRAY_KIND_MOUSE
+    bool "Mouse"
+
+config LAMPARRAY_KIND_GAME_CONTROLLER
+    bool "Controller"
+
+config LAMPARRAY_KIND_PERIPHERAL
+    bool "Peripheral"
+
+config LAMPARRAY_KIND_SCENE
+    bool "Scene"
+
+config LAMPARRAY_KIND_NOTIFICATION
+    bool "Notification"
+
+config LAMPARRAY_KIND_CHASSIS
+    bool "Chassis"
+
+config LAMPARRAY_KIND_WEARABLE
+    bool "Wearable"
+
+config LAMPARRAY_KIND_FURNITURE
+    bool "Furniture"
+
+config LAMPARRAY_KIND_ART
+    bool "Art"
+
+endchoice
+
+config LAMPARRAY_KIND
+    hex
+    default 0x01 if LAMPARRAY_KIND_KEYBOARD
+    default 0x02 if LAMPARRAY_KIND_MOUSE
+    default 0x03 if LAMPARRAY_KIND_GAME_CONTROLLER
+    default 0x04 if LAMPARRAY_KIND_PERIPHERAL
+    default 0x05 if LAMPARRAY_KIND_SCENE
+    default 0x06 if LAMPARRAY_KIND_NOTIFICATION
+    default 0x07 if LAMPARRAY_KIND_CHASSIS
+    default 0x08 if LAMPARRAY_KIND_WEARABLE
+    default 0x09 if LAMPARRAY_KIND_FURNITURE
+    default 0x0A if LAMPARRAY_KIND_ART
 
 endmenu
 
