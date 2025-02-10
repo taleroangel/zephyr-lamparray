@@ -1,6 +1,7 @@
 # 💡 LampArray HID for ZephyrOS
 
 Example using [Windows Dynamic Lighting](https://learn.microsoft.com/en-us/windows-hardware/design/component-guidelines/dynamic-lighting-devices)
+
 ![Demo](docs/demo.jpg)
 
 ## Overview
