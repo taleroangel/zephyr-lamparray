@@ -9,8 +9,8 @@
  *
  */
 
-#ifndef __CONTROLLER_H__
-#define __CONTROLLER_H__
+#ifndef __PIXEL_CONTROLLER_H__
+#define __PIXEL_CONTROLLER_H__
 
 #include "pixel.h"
 
@@ -28,6 +28,11 @@
  * @brief pixel_controller_main() priority
  */
 #define PIXEL_CONTROLLER_THREAD_PRIORITY 2
+
+/**
+ * @brief Max size of queued request to the pixel controller
+ */
+#define PIXEL_CONTROLLER_QUEUE_MAX 10
 
 /**
  * @brief LED strip device
@@ -52,31 +57,12 @@
 #endif
 
 /**
- * @brief Send a update request to the controller on many leds
- * @note Do not create directly, use functions instead
+ * @brief Keep the controller status
  */
-struct pixel_multiupdate_request
+struct pixel_controller_status_t
 {
-    struct pixel_update_data *data;
-    size_t size;
+    bool autonomous;
 };
-
-/**
- * @brief Create a new 'pixel_multiupdate_request' object.
- * @note This function allocated memory with 'malloc', call 'dispose_pixel_multiupdate_request' to deallocate.
- *
- * @param self A (pointer to a) 'NULL' pointer, this is where the structure will be allocated
- * @param size Number of LEDs to allocated
- * @return int 0 on success, -ERRNO on failure
- */
-int new_pixel_multiupdate_request(struct pixel_multiupdate_request **self, size_t size);
-
-/**
- * @brief Destroy (and deallocate) a 'pixel_multiupdate_request' object.
- * @param self Pointer (to a pointer) to an existing 'pixel_multiupdate_request' in memory.
- * This pointer will be freed and automatically set to NULL
- */
-void dispose_pixel_multiupdate_request(struct pixel_multiupdate_request **self);
 
 /**
  * @brief Entry point (thread) for pixel controller

@@ -46,8 +46,7 @@ enum HidReportType
 #define HID_LAMPARRAY_TIMEOUT K_SECONDS(30)
 
 /**
- * @brief This thread handles LampArray hid
- *
+ * @brief This thread initializes LampArray hid
  */
 extern void hid_lamparray_main(void *, void *, void *);
 

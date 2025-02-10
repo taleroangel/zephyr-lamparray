@@ -3,7 +3,7 @@
 
 #include "hid/hid.h"
 #include "error/error.h"
-#include "pixel/controller.h"
+#include "pixel/request.h"
 
 #include <stdlib.h>
 #include <errno.h>
@@ -17,8 +17,14 @@
 #include <zephyr/usb/class/usb_hid.h>
 #include <zephyr/drivers/usb/usb_dc.h>
 #include <zephyr/drivers/usb/udc_buf.h>
+#include <zephyr/zbus/zbus.h>
 
 LOG_MODULE_REGISTER(hid, CONFIG_HID_MODULE_LOG_LEVEL);
+
+/**
+ * @brief zbus channel for communicating with pixel controller
+ */
+ZBUS_CHAN_DECLARE(pixel_controller_zbus_channel);
 
 /**
  * @brief Report descriptor for the HID interface
@@ -148,6 +154,7 @@ static int get_attribute_report(
     switch (type)
     {
     case LAMPARRAY_ATTRIBUTES_REPORT:
+        LOG_DBG("(LampArrayAttributesReport) sent");
         // TODO: Get actual data
         const struct LampArrayAttributesReport attributes_report = {
             .ReportId = LAMPARRAY_ATTRIBUTES_REPORT,
@@ -166,20 +173,21 @@ static int get_attribute_report(
         break;
 
     case LAMPARRAY_ATTRIBUTES_RESPONSE_REPORT:
+        LOG_DBG("(LampAttributesResponseReport) sent");
         // TODO: Get actual data
         const struct LampAttributesResponseReport attributes_response_report = {
             .ReportId = LAMPARRAY_ATTRIBUTES_RESPONSE_REPORT,
             .LampId = current_lamp_id,
-            .PositionXInMicrometers = 0,
-            .PositionYInMicrometers = 0,
-            .PositionZInMicrometers = 0,
+            .PositionXInMicrometers = 10,
+            .PositionYInMicrometers = 10,
+            .PositionZInMicrometers = 10,
             .LampPurposes = LAMPARRAY_PURPOSE_ACCENT,
             .UpdateLatencyInMicroseconds = CONFIG_MIN_UPDATE_TIME,
-            .RedLevelCount = 0x00,
-            .GreenLevelCount = 0x00,
-            .BlueLevelCount = 0x000,
-            .IntensityLevelCount = 0x00,
-            .IsProgrammable = true,
+            .RedLevelCount = 0xFF,
+            .GreenLevelCount = 0xFF,
+            .BlueLevelCount = 0xFF,
+            .IntensityLevelCount = 0xFF,
+            .IsProgrammable = 0xFF,
             .InputBinding = 0x00,
         };
         // Write data to host
@@ -187,9 +195,11 @@ static int get_attribute_report(
             data, len,
             (void *)&attributes_response_report,
             sizeof(attributes_response_report), max_len);
+
         // Important! LampArray specifies that this should increment on each call
         //! Carefull with overflowing this counter, this should reset at max number of LEDs
         current_lamp_id = (current_lamp_id + 1) % LAMPARRAY_NUMBER_LED;
+
         break;
 
     default:
@@ -220,6 +230,10 @@ static int set_attribute_report(
     // Errno code
     int err;
 
+    // Create the request
+    struct pixel_controller_request pixel_rq;
+
+    // Note: Breaking in this loop means sending the request
     switch (report)
     {
     case LAMPARRAY_ATTRIBUTES_REQUEST_REPORT:
@@ -228,7 +242,9 @@ static int set_attribute_report(
         LOG_DBG("LampAttributesRequestReport { .LampId = %d }", attributes_request_report.LampId);
         // Set the LampID for subsequent calls
         current_lamp_id = attributes_request_report.LampId;
-        break;
+        // This function does not write to pixel controller
+        // ! Return instead of breaking
+        return 0;
 
     case LAMPARRAY_MULTIUPDATE_REPORT:
         // Special case here, Report #4 handles variable length
@@ -239,13 +255,11 @@ static int set_attribute_report(
         memcpy(&multiupdate_begin, data, sizeof(multiupdate_begin));
         copied_bytes += sizeof(multiupdate_begin);
 
-        // Allocate space for pixel data
-        struct pixel_multiupdate_request *update_req = NULL;
-        if ((err = new_pixel_multiupdate_request(
-                 &update_req, multiupdate_begin.LampCount)) < 0)
+        // Check size
+        if (multiupdate_begin.LampCount > LAMPARRAY_NUMBER_LED)
         {
-            LOG_ERR("set_attribute_report: Failed to allocate (errno=%d)", err);
-            return err;
+            LOG_ERR("set_attribute_report: buffer overflow (%lld)", multiupdate_begin.LampCount);
+            return -EINVAL;
         }
 
         // Get the LampId records first
@@ -257,7 +271,7 @@ static int set_attribute_report(
             copied_bytes += sizeof(lamp_id);
 
             // Set update request
-            update_req->data[i].id = lamp_id.LampId;
+            pixel_rq.request.multiupdate.data[i].id = lamp_id.LampId;
         }
 
         // Get the update channel data at last
@@ -269,24 +283,22 @@ static int set_attribute_report(
             copied_bytes += sizeof(update_channels);
 
             // Set update request
-            update_req->data[i].red = update_channels.RedUpdateChannel;
-            update_req->data[i].green = update_channels.GreenUpdateChannel;
-            update_req->data[i].blue = update_channels.BlueUpdateChannel;
-            update_req->data[i].intensity = update_channels.IntensityUpdateChannel;
+            pixel_rq.request.multiupdate.data[i].red = update_channels.RedUpdateChannel;
+            pixel_rq.request.multiupdate.data[i].green = update_channels.GreenUpdateChannel;
+            pixel_rq.request.multiupdate.data[i].blue = update_channels.BlueUpdateChannel;
+            pixel_rq.request.multiupdate.data[i].intensity = update_channels.IntensityUpdateChannel;
         }
 
         // Check that data matches
         if (copied_bytes != len)
         {
             LOG_ERR("set_attribute_report: data mismatch (len=%d, recv=%d)", len, copied_bytes);
-            // Dispose of allocated data
-            dispose_pixel_multiupdate_request(&update_req);
             return -EINVAL;
         }
 
-        // TODO: Remove this once the structure is passed to the controller
-        // The controller should be the one that disposes the object
-        dispose_pixel_multiupdate_request(&update_req);
+        // Set request values
+        pixel_rq.n_updates = multiupdate_begin.LampCount;
+        pixel_rq.type = PIXEL_CONTROLLER_REQUEST_MULTIUPDATE;
         break;
 
     case LAMPARRAY_RANGE_UPDATE_REPORT:
@@ -307,20 +319,52 @@ static int set_attribute_report(
                 range_update_report.GreenUpdateChannel,
                 range_update_report.BlueUpdateChannel,
                 range_update_report.IntensityUpdateChannel);
+
+        // Set pixel data
+        pixel_rq.n_updates = (range_update_report.LampIdEnd - range_update_report.LampIdStart);
+        pixel_rq.type = PIXEL_CONTROLLER_REQUEST_RANGEUPDATE;
+        pixel_rq.request.rangeupdate.from = range_update_report.LampIdStart;
+        pixel_rq.request.rangeupdate.to = range_update_report.LampIdEnd;
+        pixel_rq.request.rangeupdate.values.red = range_update_report.RedUpdateChannel;
+        pixel_rq.request.rangeupdate.values.green = range_update_report.GreenUpdateChannel;
+        pixel_rq.request.rangeupdate.values.blue = range_update_report.BlueUpdateChannel;
+        pixel_rq.request.rangeupdate.values.intensity = range_update_report.IntensityUpdateChannel;
         break;
 
     case LAMPARRAY_CONTROL_REPORT:
         struct LampArrayControlReport control_report = {};
         memcpy(&control_report, data, len);
         LOG_DBG("LampArrayControlReport { .AutonomousMode = %d }", control_report.AutonomousMode);
+
+        // Set request values
+        pixel_rq.n_updates = 1U;
+        pixel_rq.type = PIXEL_CONTROLLER_REQUEST_AUTONOMOUS;
+        pixel_rq.request.autonomous = (bool)(control_report.AutonomousMode == 1);
         break;
 
     default:
         // Operation not supported
-        LOG_INF("set_attribute_report: (%d) not supported", report);
+        LOG_WRN("set_attribute_report: (%d) not supported", report);
         return -ENOTSUP;
     }
 
+    // Check request is valid
+    if (pixel_rq.n_updates == 0)
+    {
+        LOG_WRN("set_attributes_report: empty request");
+        return -EINVAL;
+    }
+
+    // Send the response
+    if ((err = zbus_chan_pub(
+             &pixel_controller_zbus_channel,
+             &pixel_rq, K_USEC(CONFIG_MIN_UPDATE_TIME * pixel_rq.n_updates))) < 0)
+    {
+        LOG_ERR("set_attributes_report: zbus error (errno=%d)", err);
+        return err;
+    }
+
+    LOG_DBG("sent request (%d) to zbus", pixel_rq.type);
     return 0;
 }
 
@@ -465,7 +509,7 @@ static int hid_interface_init(const struct device *hid_device)
     // Log the hexdump of the 'hid_report_desc'
     LOG_HEXDUMP_DBG(
         hid_report_desc, sizeof(hid_report_desc),
-        "USB HID Report Descriptor");
+        "HID Report Descriptor");
 
     // Register the HID device
     usb_hid_register_device(
@@ -476,7 +520,7 @@ static int hid_interface_init(const struct device *hid_device)
         &hid_callback_ops);
 
     // Log the hexdump of the 'hid_report_desc'
-    LOG_INF("Device registered");
+    LOG_INF("hid_interface_init: device registered");
 
     // Initialize the HID Class
     if ((err = usb_hid_init(hid_device)) < 0)
@@ -491,7 +535,7 @@ static int hid_interface_init(const struct device *hid_device)
     }
 
     // Return sucess
-    LOG_INF("USB interface ready");
+    LOG_INF("hid_interface_init: interface ready");
     return 0;
 }
 
@@ -515,10 +559,5 @@ void hid_lamparray_main(void *_p1, void *_p2, void *_p3)
     if ((err = hid_interface_init(hid_device)) < 0)
     {
         application_panic(ERROR_REASON_HARDWARE, err);
-    }
-
-    while (true)
-    {
-        k_yield();
     }
 }

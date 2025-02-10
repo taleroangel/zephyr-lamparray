@@ -10,7 +10,7 @@ config HID_MODULE_LOG_LEVEL
 
 config MIN_UPDATE_TIME
     int "Minimum update time before Host request update"
-    default 50
+    default 150
 
 endmenu
 
