@@ -18,7 +18,6 @@ typedef uint8_t color_t;
  */
 struct pixel_update_data
 {
-    pixel_id_t id;
     color_t red;
     color_t green;
     color_t blue;

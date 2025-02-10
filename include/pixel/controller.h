@@ -57,11 +57,11 @@
 #endif
 
 /**
- * @brief Keep the controller status
+ * @brief Operation mode for the controller
  */
-struct pixel_controller_status_t
-{
-    bool autonomous;
+enum pixel_controller_operation_mode {
+    PIXEL_CONTROLLER_OPERATION_MODE_AUTONOMOUS,
+    PIXEL_CONTROLLER_OPERATION_MODE_SLAVE,
 };
 
 /**

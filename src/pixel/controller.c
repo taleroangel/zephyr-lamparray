@@ -42,13 +42,10 @@ static uint8_t color_scale_intensity(uint8_t color, uint8_t intensity)
  */
 static struct led_rgb cast_to_rgb(const struct pixel_update_data *from)
 {
-    struct led_rgb to;
-    to.r = color_scale_intensity(from->red, from->intensity);
-    to.g = color_scale_intensity(from->green, from->intensity);
-    to.b = color_scale_intensity(from->blue, from->intensity);
-
-    LOG_DBG("[%d](%02X, %02X, %02X)", from->id, to.r, to.g, to.b);
-    return to;
+    return (struct led_rgb){
+        .r = color_scale_intensity(from->red, from->intensity),
+        .g = color_scale_intensity(from->green, from->intensity),
+        .b = color_scale_intensity(from->blue, from->intensity)};
 }
 
 /**
@@ -64,58 +61,49 @@ void pixel_controller_main(void *_p1, void *_p2, void *_p3)
     ARG_UNUSED(_p2);
     ARG_UNUSED(_p3);
 
+    // Errno code
+    int err = 0;
+
     // Initialize device
     if (!device_is_ready(strip_0))
         application_panic(ERROR_REASON_HARDWARE, 0);
 
-    LOG_INF("pixel_controller_main: ready");
+    // Current controller operation mode
+    enum pixel_controller_operation_mode opmode =
+        PIXEL_CONTROLLER_OPERATION_MODE_AUTONOMOUS;
 
     // Structure with the LED data
     struct led_rgb pixel_data[PIXEL_NUMBER_OF_LEDS];
     memset(pixel_data, 0, sizeof(pixel_data));
 
-    int err = 0;
+    // Channel for recieving requests
     const struct zbus_channel *channel;
 
     // Wait indefinitely for messages in the zbus
     while ((err = zbus_sub_wait(&pixel_controller_zbus_observer, &channel, K_FOREVER)) == 0)
     {
-        LOG_DBG("zbus: request arrival");
-
         // Get the request
         const struct pixel_controller_request *instruction = zbus_chan_const_msg(channel);
+        LOG_DBG("Solving request (%d)", instruction->type);
 
         switch (instruction->type)
         {
         case PIXEL_CONTROLLER_REQUEST_NONE:
-            LOG_DBG("pixel_controller: PIXEL_CONTROLLER_REQUEST_NONE");
             break;
 
-        case PIXEL_CONTROLLER_REQUEST_MULTIUPDATE:
-            LOG_DBG("pixel_controller: PIXEL_CONTROLLER_REQUEST_MULTIUPDATE(%d)", instruction->n_updates);
-            for (size_t i = 0; i < instruction->request.multiupdate.size; i++)
-            {
-                // Get update request
-                const struct pixel_update_data *pixel_update = &instruction->request.multiupdate.data[i];
-                // Apply color
-                pixel_data[pixel_update->id] = cast_to_rgb(pixel_update);
-            }
-            break;
-
-        case PIXEL_CONTROLLER_REQUEST_RANGEUPDATE:
-            LOG_DBG("pixel_controller: PIXEL_CONTROLLER_REQUEST_RANGEUPDATE(%d)", instruction->n_updates);
+        case PIXEL_CONTROLLER_REQUEST_UPDATE:
             // Update every pixel from
-            for (size_t i = instruction->request.rangeupdate.from;
-                 i < instruction->request.rangeupdate.to; i++)
+            for (size_t i = 0; i < PIXEL_NUMBER_OF_LEDS; i++)
             {
                 // Apply color
-                pixel_data[i] = cast_to_rgb(&instruction->request.rangeupdate.values);
+                pixel_data[i] = cast_to_rgb(&instruction->request.update[i]);
             }
             break;
 
-        case PIXEL_CONTROLLER_REQUEST_AUTONOMOUS:
-            LOG_DBG("pixel_controller: PIXEL_CONTROLLER_REQUEST_AUTONOMOUS(%d)", instruction->n_updates);
-            // TODO: Set autonomous mode
+        case PIXEL_CONTROLLER_REQUEST_OPERATION:
+            // Set the new operation mode
+            opmode = instruction->request.operation;
+            LOG_INF("Operation mode (%d)", opmode);
             break;
 
         default:

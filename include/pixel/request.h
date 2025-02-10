@@ -7,35 +7,14 @@
 #include "controller.h"
 
 /**
- * @brief Send an update request to the controller on many leds
- * @note Do not create directly, use functions instead (malloc used)
- */
-struct pixel_multiupdate_request
-{
-    struct pixel_update_data data[PIXEL_NUMBER_OF_LEDS];
-    size_t size;
-};
-
-/**
- * @brief Send an update request to the controller on a range of leds
- */
-struct pixel_rangeupdate_request
-{
-    pixel_id_t from;
-    pixel_id_t to;
-    struct pixel_update_data values;
-};
-
-/**
  * @brief Type of the request being sent to the controller
  *
  */
 enum pixel_controller_request_type
 {
     PIXEL_CONTROLLER_REQUEST_NONE,
-    PIXEL_CONTROLLER_REQUEST_MULTIUPDATE,
-    PIXEL_CONTROLLER_REQUEST_RANGEUPDATE,
-    PIXEL_CONTROLLER_REQUEST_AUTONOMOUS,
+    PIXEL_CONTROLLER_REQUEST_UPDATE,
+    PIXEL_CONTROLLER_REQUEST_OPERATION,
 };
 
 /**
@@ -44,12 +23,6 @@ enum pixel_controller_request_type
  */
 struct pixel_controller_request
 {
-    /**
-     * @brief Number of updated properties, this is required so that senders can
-     * calculate time of delay
-     */
-    uint8_t n_updates;
-
     /**
      * @brief Specifies the type contained in the 'union'
      */
@@ -63,17 +36,12 @@ struct pixel_controller_request
         /**
          * @brief Update many pixels at once
          */
-        struct pixel_multiupdate_request multiupdate;
+        struct pixel_update_data update[PIXEL_NUMBER_OF_LEDS];
 
         /**
-         * @brief Update a range of pixels
+         * @brief Change controller's operation type
          */
-        struct pixel_rangeupdate_request rangeupdate;
-
-        /**
-         * @brief Enable or disable the autonomous mode
-         */
-        bool autonomous;
+        enum pixel_controller_operation_mode operation;
 
     } request;
 };

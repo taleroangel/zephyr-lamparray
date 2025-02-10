@@ -94,6 +94,16 @@
         HID_COLLECTION(HID_COLLECTION_APPLICATION)
 
 /**
+ * @brief Lamp dimensions (width and height)
+ */
+#define LAMP_BOUNDING_BOX_WH 5000UL
+
+/**
+ * @brief Lamp dimensions (depth)
+ */
+#define LAMP_BOUNDING_BOX_DEPTH 1000UL
+
+/**
  * @brief All of the 6 report types ordered
  */
 enum LampArrayReportType
