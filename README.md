@@ -1,5 +1,7 @@
 # 💡 LampArray HID for ZephyrOS
 
+**Project moved to Codeberg [https://codeberg.org/migun/zephyr-lamparray](https://codeberg.org/migun/zephyr-lamparray)!**
+
 Example using [Windows Dynamic Lighting](https://learn.microsoft.com/en-us/windows-hardware/design/component-guidelines/dynamic-lighting-devices)
 
 ![Demo](docs/demo.jpg)
